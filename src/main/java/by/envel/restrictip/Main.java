@@ -57,7 +57,9 @@ public class Main extends JavaPlugin implements Listener {
         // Load player-IP associations from the configuration
         for (String playerName : config.getKeys(false)) {
             String ip = config.getString(playerName);
-            playerIPs.put(playerName, ip);
+            if (playerName != null && ip != null) {
+                playerIPs.put(playerName, ip);
+            }
         }
     }
 
@@ -74,6 +76,7 @@ public class Main extends JavaPlugin implements Listener {
                 try {
                     config.save(new File(getDataFolder(), "config.yml"));
                 } catch (IOException e) {
+                    getLogger().severe("An error occurred while saving the configuration file:");
                     e.printStackTrace();
                 }
             }
@@ -83,64 +86,60 @@ public class Main extends JavaPlugin implements Listener {
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         if (command.getName().equalsIgnoreCase("addip")) {
-            if (!sender.isOp()) {
+            if (sender != null && !sender.isOp()) {
                 sender.sendMessage(ChatColor.RED + "You are not an operator!");
                 return true;
             }
 
-            if (args.length != 2) {
+            if (args != null && args.length == 2 && args[0] != null && args[1] != null) {
+                String playerName = args[0];
+                String ip = args[1];
+                if (playerName != null && ip != null) {
+                    playerIPs.put(playerName, ip);
+                    if (sender != null) {
+                        sender.sendMessage(ChatColor.GREEN + "IP " + ip + " associated with player " + playerName + ".");
+                        saveConfigFileAsync(); // Save to the configuration file asynchronously
+                    }
+                } else if (sender != null) {
+                    sender.sendMessage(ChatColor.RED + "Invalid player name or IP.");
+                }
+            } else if (sender != null) {
                 sender.sendMessage(ChatColor.RED + "Usage: /addip <playername> <ip>");
-                return true;
             }
-
-            String playerName = args[0];
-            String ip = args[1];
-            playerIPs.put(playerName, ip);
-            sender.sendMessage(ChatColor.GREEN + "IP " + ip + " associated with player " + playerName + ".");
-            saveConfigFileAsync(); // Save to the configuration file asynchronously
             return true;
         } else if (command.getName().equalsIgnoreCase("reloadip")) {
-            if (!sender.isOp()) {
+            if (sender != null && !sender.isOp()) {
                 sender.sendMessage(ChatColor.RED + "You are not an operator!");
                 return true;
             }
 
-            sender.sendMessage(ChatColor.GREEN + "Reloading IP configuration...");
-            loadConfig();
-            sender.sendMessage(ChatColor.GREEN + "IP configuration reloaded.");
+            if (sender != null) {
+                sender.sendMessage(ChatColor.GREEN + "Reloading IP configuration...");
+                loadConfig();
+                sender.sendMessage(ChatColor.GREEN + "IP configuration reloaded.");
+            }
             return true;
         } else if (command.getName().equalsIgnoreCase("restrictip")) {
             // Check if the sender is a player and has operator permission
-            if (!(sender instanceof Player) || !sender.isOp()) {
+            if (sender != null && (sender instanceof Player) && sender.isOp()) {
+                // Extract player name and IP from the sender
+                Player player = (Player) sender;
+                String playerName = player.getName();
+                String playerIP = player.getAddress() != null ? player.getAddress().getHostString() : null;
+
+                if (playerName != null && playerIP != null) {
+                    // Update the player-IP association and save to the configuration file asynchronously
+                    playerIPs.put(playerName, playerIP);
+                    if (sender != null) {
+                        sender.sendMessage(ChatColor.GREEN + "Only you (player " + playerName + ") can join the server with your current IP.");
+                        saveConfigFileAsync();
+                    }
+                } else if (sender != null) {
+                    sender.sendMessage(ChatColor.RED + "Unable to retrieve your player name or IP address.");
+                }
+            } else if (sender != null) {
                 sender.sendMessage(ChatColor.RED + "You are not an operator!");
-                return true;
             }
-
-            // Extract player name and IP from the sender
-            Player player = (Player) sender;
-            String playerName = player.getName();
-            String playerIP = player.getAddress().getHostString();
-
-            // Update the player-IP association and save to the configuration file asynchronously
-            playerIPs.put(playerName, playerIP);
-            sender.sendMessage(ChatColor.GREEN + "Only you (player " + playerName + ") can join the server with your current IP.");
-            saveConfigFileAsync();
-            return true;
-        } else if (command.getName().equalsIgnoreCase("reloadip")) {
-            // Check if the sender has operator permission
-            if (!sender.isOp()) {
-                sender.sendMessage(ChatColor.RED + "You are not an operator!");
-                return true;
-            }
-
-            // Inform the sender about the ongoing reload
-            sender.sendMessage(ChatColor.GREEN + "Reloading IP configuration...");
-
-            // Reload the configuration file
-            loadConfig();
-
-            // Inform the sender about the completion of the reload
-            sender.sendMessage(ChatColor.GREEN + "IP configuration reloaded.");
             return true;
         }
 
@@ -150,10 +149,9 @@ public class Main extends JavaPlugin implements Listener {
     @EventHandler
     public void onPlayerLogin(AsyncPlayerPreLoginEvent event) {
         String playerName = event.getName();
-        String playerIP = event.getAddress().getHostAddress();
+        String playerIP = event.getAddress() != null ? event.getAddress().getHostAddress() : null;
 
-        // Check the IP match for the incoming player
-        if (playerIPs.containsKey(playerName) && !playerIPs.get(playerName).equals(playerIP)) {
+        if (playerName != null && playerIP != null && playerIPs.containsKey(playerName) && !playerIPs.get(playerName).equals(playerIP)) {
             event.disallow(AsyncPlayerPreLoginEvent.Result.KICK_OTHER, "Your IP does not match the registered IP.");
         }
     }
