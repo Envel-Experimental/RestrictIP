@@ -1,8 +1,8 @@
 name: RestrictIP
-version: '${version}'
+version: '1.0'
 main: by.envel.restrictip.Main
 api-version: "1.16"
-authors: [ Envel ]
+authors: [Envel]
 
 commands:
   addip:
@@ -11,8 +11,14 @@ commands:
   restrictip:
     description: Restrict access to the server based on your IP
     usage: /restrictip
+  reloadip:
+    description: Reload the IP configuration
+    usage: /reloadip
+
 permissions:
   restrictip.addip:
     description: Allows the player to use /addip command
   restrictip.restrictip:
     description: Allows the player to use /restrictip command
+  restrictip.reloadip:
+    description: Allows the player to use /reloadip command

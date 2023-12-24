@@ -3,13 +3,15 @@ package by.envel.restrictip;
 import org.bukkit.ChatColor;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
+import org.bukkit.configuration.file.FileConfiguration;
+import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
+import org.bukkit.event.player.AsyncPlayerPreLoginEvent;
 import org.bukkit.event.player.PlayerLoginEvent;
-import org.bukkit.configuration.file.FileConfiguration;
-import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.scheduler.BukkitRunnable;
 
 import java.io.File;
 import java.io.IOException;
@@ -18,7 +20,6 @@ import java.util.Map;
 
 public class Main extends JavaPlugin implements Listener {
     private Map<String, String> playerIPs; // Player Name -> IP
-    private String restrictedIP; // Restricted IP
     private FileConfiguration config;
 
     @Override
@@ -29,8 +30,13 @@ public class Main extends JavaPlugin implements Listener {
         // Register events
         getServer().getPluginManager().registerEvents(this, this);
 
-        // Load the configuration file
-        loadConfig();
+        // Load the configuration file asynchronously
+        new BukkitRunnable() {
+            @Override
+            public void run() {
+                loadConfig();
+            }
+        }.runTaskAsynchronously(this);
     }
 
     private void loadConfig() {
@@ -55,18 +61,23 @@ public class Main extends JavaPlugin implements Listener {
         }
     }
 
-    private void saveConfigFile() {
-        // Save player-IP associations to the configuration
-        for (Map.Entry<String, String> entry : playerIPs.entrySet()) {
-            config.set(entry.getKey(), entry.getValue());
-        }
+    private void saveConfigFileAsync() {
+        // Save player-IP associations to the configuration asynchronously
+        new BukkitRunnable() {
+            @Override
+            public void run() {
+                for (Map.Entry<String, String> entry : playerIPs.entrySet()) {
+                    config.set(entry.getKey(), entry.getValue());
+                }
 
-        // Save the configuration to file
-        try {
-            config.save(new File(getDataFolder(), "config.yml"));
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+                // Save the configuration to file
+                try {
+                    config.save(new File(getDataFolder(), "config.yml"));
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+        }.runTaskAsynchronously(this);
     }
 
     @Override
@@ -86,23 +97,50 @@ public class Main extends JavaPlugin implements Listener {
             String ip = args[1];
             playerIPs.put(playerName, ip);
             sender.sendMessage(ChatColor.GREEN + "IP " + ip + " associated with player " + playerName + ".");
-            saveConfigFile(); // Save to the configuration file
+            saveConfigFileAsync(); // Save to the configuration file asynchronously
+            return true;
+        } else if (command.getName().equalsIgnoreCase("reloadip")) {
+            if (!sender.isOp()) {
+                sender.sendMessage(ChatColor.RED + "You are not an operator!");
+                return true;
+            }
+
+            sender.sendMessage(ChatColor.GREEN + "Reloading IP configuration...");
+            loadConfig();
+            sender.sendMessage(ChatColor.GREEN + "IP configuration reloaded.");
             return true;
         } else if (command.getName().equalsIgnoreCase("restrictip")) {
+            // Check if the sender is a player and has operator permission
             if (!(sender instanceof Player) || !sender.isOp()) {
                 sender.sendMessage(ChatColor.RED + "You are not an operator!");
                 return true;
             }
 
+            // Extract player name and IP from the sender
             Player player = (Player) sender;
             String playerName = player.getName();
             String playerIP = player.getAddress().getHostString();
 
+            // Update the player-IP association and save to the configuration file asynchronously
             playerIPs.put(playerName, playerIP);
-            restrictedIP = playerIP;
-
             sender.sendMessage(ChatColor.GREEN + "Only you (player " + playerName + ") can join the server with your current IP.");
-            saveConfigFile(); // Save to the configuration file
+            saveConfigFileAsync();
+            return true;
+        } else if (command.getName().equalsIgnoreCase("reloadip")) {
+            // Check if the sender has operator permission
+            if (!sender.isOp()) {
+                sender.sendMessage(ChatColor.RED + "You are not an operator!");
+                return true;
+            }
+
+            // Inform the sender about the ongoing reload
+            sender.sendMessage(ChatColor.GREEN + "Reloading IP configuration...");
+
+            // Reload the configuration file
+            loadConfig();
+
+            // Inform the sender about the completion of the reload
+            sender.sendMessage(ChatColor.GREEN + "IP configuration reloaded.");
             return true;
         }
 
@@ -110,20 +148,13 @@ public class Main extends JavaPlugin implements Listener {
     }
 
     @EventHandler
-    public void onPlayerLogin(PlayerLoginEvent event) {
-        Player player = event.getPlayer();
-        String playerName = player.getName();
+    public void onPlayerLogin(AsyncPlayerPreLoginEvent event) {
+        String playerName = event.getName();
         String playerIP = event.getAddress().getHostAddress();
 
         // Check the IP match for the incoming player
         if (playerIPs.containsKey(playerName) && !playerIPs.get(playerName).equals(playerIP)) {
-            event.disallow(PlayerLoginEvent.Result.KICK_OTHER, "Your IP does not match the registered IP.");
-            return;
-        }
-
-        // Check if the IP matches the restricted IP
-        if (restrictedIP != null && !restrictedIP.equals(playerIP)) {
-            event.disallow(PlayerLoginEvent.Result.KICK_OTHER, "Access to the server is restricted from your IP.");
+            event.disallow(AsyncPlayerPreLoginEvent.Result.KICK_OTHER, "Your IP does not match the registered IP.");
         }
     }
 }
